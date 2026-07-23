@@ -19,52 +19,66 @@ export default function BookingModal({
   webContent,
   setWebContent
 }) {
-  // Pre-populated Users Database in localStorage (Directly synced with Firestore / Firebase Auth)
+  // Default Mandatory System Accounts
+  const defaultAccounts = [
+    {
+      username: 'admin_maicol',
+      password: 'admin123',
+      role: 'admin',
+      name: 'Maicol (Fundador & Admin)',
+      phone: '+51 987 654 321',
+      verified: true,
+      isDualRole: true
+    },
+    {
+      username: 'barber_maicol',
+      password: 'barber123',
+      role: 'barber',
+      barberId: 'maicol',
+      name: 'Maicol',
+      phone: '+51 987 654 321',
+      verified: true,
+      mustChangePassword: false
+    },
+    {
+      username: 'barber_diego',
+      password: 'barber123',
+      role: 'barber',
+      barberId: 'diego',
+      name: 'Diego',
+      phone: '+51 987 000 111',
+      verified: true,
+      mustChangePassword: true
+    },
+    {
+      username: 'cliente_demo',
+      password: '123456',
+      role: 'client',
+      name: 'Carlos Mendoza',
+      phone: '+51 999 888 777',
+      verified: true,
+      cancellationCount: 0,
+      blockedUntil: null
+    }
+  ];
+
+  // Users Database with automatic fallback and merge for default accounts
   const [usersDb, setUsersDb] = useState(() => {
     const saved = localStorage.getItem('tb_users_db');
-    if (saved) return JSON.parse(saved);
-
-    return [
-      {
-        username: 'admin_maicol',
-        password: 'admin123',
-        role: 'admin',
-        name: 'Maicol (Fundador & Admin)',
-        phone: '+51 987 654 321',
-        verified: true,
-        isDualRole: true
-      },
-      {
-        username: 'barber_maicol',
-        password: 'barber123',
-        role: 'barber',
-        barberId: 'maicol',
-        name: 'Maicol',
-        phone: '+51 987 654 321',
-        verified: true,
-        mustChangePassword: false
-      },
-      {
-        username: 'barber_diego',
-        password: 'barber123',
-        role: 'barber',
-        barberId: 'diego',
-        name: 'Diego',
-        phone: '+51 987 000 111',
-        verified: true,
-        mustChangePassword: true
-      },
-      {
-        username: 'cliente_demo',
-        password: '123456',
-        role: 'client',
-        name: 'Carlos Mendoza',
-        phone: '+51 999 888 777',
-        verified: true,
-        cancellationCount: 0,
-        blockedUntil: null
-      }
-    ];
+    if (!saved) return defaultAccounts;
+    try {
+      const parsed = JSON.parse(saved);
+      // Merge default accounts if missing in localStorage
+      const merged = [...parsed];
+      defaultAccounts.forEach(defAcc => {
+        if (!merged.some(u => u.username.toLowerCase() === defAcc.username.toLowerCase())) {
+          merged.push(defAcc);
+        }
+      });
+      return merged;
+    } catch {
+      return defaultAccounts;
+    }
   });
 
   // Current Logged in User
@@ -117,7 +131,6 @@ export default function BookingModal({
 
   // Form States: Edit Profile
   const [editPhone, setEditPhone] = useState('');
-  const [editSuccess, setEditSuccess] = useState(false);
 
   // Form States: Booking
   const [selectedService, setSelectedService] = useState('combo-corte-barba');
@@ -130,11 +143,6 @@ export default function BookingModal({
   const [notes, setNotes] = useState('');
   const [createdTicket, setCreatedTicket] = useState(null);
 
-  // Form States: Reschedule
-  const [rescheduleBookingId, setRescheduleBookingId] = useState(null);
-  const [rescheduleDate, setRescheduleDate] = useState('');
-  const [rescheduleTime, setRescheduleTime] = useState('11:00 AM');
-
   // Sync Active Role View on Login
   useEffect(() => {
     if (currentUser) {
@@ -144,23 +152,6 @@ export default function BookingModal({
         setActiveRoleView('barber');
       } else {
         setActiveRoleView('client');
-      }
-    }
-  }, [currentUser]);
-
-  // Check and Auto-Unblock 1-Week Cancellation Penalty
-  useEffect(() => {
-    if (currentUser && currentUser.blockedUntil) {
-      const now = Date.now();
-      const unblockTime = new Date(currentUser.blockedUntil).getTime();
-      if (now >= unblockTime) {
-        const unblockedUser = {
-          ...currentUser,
-          cancellationCount: 0,
-          blockedUntil: null
-        };
-        setCurrentUser(unblockedUser);
-        setUsersDb(prev => prev.map(u => u.username === unblockedUser.username ? unblockedUser : u));
       }
     }
   }, [currentUser]);
@@ -241,7 +232,7 @@ export default function BookingModal({
 
   const isUserBlocked = currentUser?.blockedUntil && new Date().getTime() < new Date(currentUser.blockedUntil).getTime();
 
-  // ==================== FLEXIBLE FIREBASE/FIRESTORE LOGIN HANDLER ====================
+  // ==================== FLEXIBLE LOGIN HANDLER ====================
 
   const handleLoginSubmit = (e) => {
     e.preventDefault();
@@ -249,11 +240,16 @@ export default function BookingModal({
 
     const inputClean = loginUsername.trim().toLowerCase();
 
-    // 1. Search DB flexibly by username, email, or name match (Supports direct Firestore inserted Admin & Barber accounts!)
-    const found = usersDb.find(u => 
+    // 1. Search in current memory state or fallback default accounts
+    let found = usersDb.find(u => 
       u.username.toLowerCase() === inputClean || 
       (u.email && u.email.toLowerCase() === inputClean)
     );
+
+    // If not found in usersDb, check default accounts fallback
+    if (!found) {
+      found = defaultAccounts.find(u => u.username.toLowerCase() === inputClean);
+    }
 
     if (!found) {
       setLoginError('Usuario o contraseña no encontrados. Verifica tus credenciales o regístrate si eres cliente.');
@@ -265,11 +261,15 @@ export default function BookingModal({
       return;
     }
 
-    // Direct Firestore / Auth accounts are automatically verified
     const authenticatedUser = {
       ...found,
       verified: true
     };
+
+    // Ensure account exists in usersDb
+    if (!usersDb.some(u => u.username.toLowerCase() === authenticatedUser.username.toLowerCase())) {
+      setUsersDb(prev => [...prev, authenticatedUser]);
+    }
 
     setCurrentUser(authenticatedUser);
     setEditPhone(authenticatedUser.phone || '');
@@ -339,11 +339,8 @@ export default function BookingModal({
     const updated = { ...currentUser, phone: editPhone.trim() };
     setCurrentUser(updated);
     setUsersDb(prev => prev.map(u => u.username === updated.username ? updated : u));
-    setEditSuccess(true);
-    setTimeout(() => setEditSuccess(false), 3000);
+    alert('Datos de perfil guardados correctamente.');
   };
-
-  // ==================== BOOKING & CANCELLATION HANDLERS ====================
 
   const handleCreateBooking = (e) => {
     e.preventDefault();
