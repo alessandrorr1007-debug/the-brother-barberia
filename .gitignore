@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Production Builds
+dist
+dist-ssr
+build
+*.local
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Firebase
+.firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

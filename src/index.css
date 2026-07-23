@@ -1,0 +1,252 @@
+/* ==========================================================================
+   THE BROTHER BARBERSHOP - LUXURY DARK VINTAGE STYLING SYSTEM
+   ========================================================================== */
+
+:root {
+  --bg-dark: #0A0A0C;
+  --bg-card: #141417;
+  --bg-card-hover: #1C1C21;
+  --bg-glass: rgba(20, 20, 23, 0.75);
+  
+  --gold-primary: #C5A059;
+  --gold-light: #E8CA83;
+  --gold-dark: #967635;
+  --gold-glow: rgba(197, 160, 89, 0.22);
+  
+  --text-main: #F4F4F6;
+  --text-muted: #9E9EA8;
+  --text-gold: #C5A059;
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-gold: rgba(197, 160, 89, 0.35);
+
+  --font-display: 'Cinzel', 'Playfair Display', Georgia, serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 9999px;
+}
+
+/* Reset & Base */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: #25252b;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-primary);
+}
+
+/* Typography Utilities */
+h1, h2, h3, h4, .font-serif {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+.text-gold {
+  color: var(--gold-primary);
+}
+
+.gradient-text-gold {
+  background: linear-gradient(135deg, #FFF 0%, var(--gold-light) 50%, var(--gold-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.section-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--gold-primary);
+  background: rgba(197, 160, 89, 0.08);
+  border: 1px solid var(--border-gold);
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  margin-bottom: 14px;
+}
+
+.section-title {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 800;
+  line-height: 1.15;
+  margin-bottom: 16px;
+  color: var(--text-main);
+}
+
+.section-subtitle {
+  font-size: 1.05rem;
+  color: var(--text-muted);
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 28px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  text-decoration: none;
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold-primary) 100%);
+  color: #0A0A0C;
+  box-shadow: 0 8px 24px var(--gold-glow);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(197, 160, 89, 0.4);
+  background: linear-gradient(135deg, #FFF 0%, var(--gold-light) 100%);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--gold-primary);
+  color: var(--gold-primary);
+  transform: translateY(-2px);
+}
+
+.btn-whatsapp {
+  background: #25D366;
+  color: #FFF;
+  box-shadow: 0 8px 24px rgba(37, 211, 102, 0.3);
+}
+
+.btn-whatsapp:hover {
+  background: #20BA5A;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(37, 211, 102, 0.45);
+}
+
+/* Layout Containers */
+.container {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.section-padding {
+  padding: 100px 0;
+}
+
+@media (max-width: 768px) {
+  .section-padding {
+    padding: 60px 0;
+  }
+}
+
+/* Glass Card */
+.glass-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: var(--transition-smooth);
+  overflow: hidden;
+}
+
+.glass-card:hover {
+  border-color: var(--border-gold);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+/* Glass Navbar */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1000;
+  transition: var(--transition-smooth);
+  padding: 20px 0;
+}
+
+.navbar.scrolled {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px var(--gold-glow);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(197, 160, 89, 0.5);
+  }
+}
+
+.pulse-glow {
+  animation: pulseGlow 3s infinite ease-in-out;
+}
