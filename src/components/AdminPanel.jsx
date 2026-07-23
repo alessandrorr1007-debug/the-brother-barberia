@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import {
   Calendar, Users, Scissors, DollarSign, BarChart3, ShieldCheck, UserPlus,
-  Edit3, Trash2, Unlock, AlertTriangle, CheckCircle, Plus, Eye, FileText, Zap, Cpu, Info, ShieldAlert
+  Edit3, Trash2, Unlock, AlertTriangle, CheckCircle, Plus, Eye, FileText, Info, ShieldAlert
 } from 'lucide-react';
-import { run200UserConcurrencyStressTest } from '../utils/concurrencyTest';
 
 export default function AdminPanel({
   currentUser,
@@ -38,32 +37,9 @@ export default function AdminPanel({
   const [aboutHistoryText, setAboutHistoryText] = useState(webContent?.history || 'The Brother nace de la pasión de Maicol...');
   const [scheduleText, setScheduleText] = useState(webContent?.schedule || 'Lunes a Sábado: 9am - 9pm');
 
-  // Stress Test State
-  const [isRunningTest, setIsRunningTest] = useState(false);
-  const [testProgressMsg, setTestProgressMsg] = useState('');
-  const [testResults, setTestResults] = useState(null);
-
   // Financial Estimation Report Filters
   const [revBarberFilter, setRevBarberFilter] = useState('all');
   const [revPeriodFilter, setRevPeriodFilter] = useState('all');
-
-  // HANDLERS: Stress Test
-  const handleRunStressTest = async () => {
-    setIsRunningTest(true);
-    setTestResults(null);
-    setTestProgressMsg('Iniciando prueba con 200 hilos concurrentes simultáneos...');
-
-    try {
-      const res = await run200UserConcurrencyStressTest((msg) => setTestProgressMsg(msg));
-      setTestResults(res);
-      const updatedBookings = JSON.parse(localStorage.getItem('tb_user_bookings') || '[]');
-      setUserBookings(updatedBookings);
-    } catch (err) {
-      alert('Error ejecutando prueba de carga: ' + err.message);
-    } finally {
-      setIsRunningTest(false);
-    }
-  };
 
   // HANDLERS: Create Barber Account
   const handleCreateBarber = (e) => {
@@ -211,17 +187,6 @@ export default function AdminPanel({
           }}
         >
           💰 Ingresos Web
-        </button>
-
-        <button
-          onClick={() => setAdminTab('stresstest')}
-          style={{
-            flex: 1, minWidth: '110px', padding: '8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer', border: 'none',
-            background: adminTab === 'stresstest' ? 'rgba(37, 211, 102, 0.2)' : 'rgba(37, 211, 102, 0.08)',
-            color: '#25D366', border: '1px solid rgba(37, 211, 102, 0.3)'
-          }}
-        >
-          ⚡ Carga (200 Users)
         </button>
 
         <button
@@ -402,61 +367,6 @@ export default function AdminPanel({
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* STRESS TEST TAB */}
-      {adminTab === 'stresstest' && (
-        <div style={{ background: 'var(--bg-dark)', padding: '24px', borderRadius: '12px', border: '1px solid rgba(37, 211, 102, 0.3)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-            <Zap size={24} color="#25D366" />
-            <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              Prueba de Carga & Concurrencia de 200 Usuarios
-            </h4>
-          </div>
-
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: '20px' }}>
-            Esta herramienta simula <strong>200 solicitudes simultáneas en paralelo</strong> creando cuentas y agendando reservas al mismo tiempo con transacciones atómicas de Firestore.
-          </p>
-
-          <button
-            onClick={handleRunStressTest}
-            disabled={isRunningTest}
-            className="btn btn-whatsapp"
-            style={{ width: '100%', padding: '14px', fontSize: '1rem' }}
-          >
-            {isRunningTest ? <Cpu className="animate-spin" size={20} /> : <Zap size={20} />}
-            <span>{isRunningTest ? 'Ejecutando Simulador de 200 Usuarios...' : 'Ejecutar Prueba de 200 Usuarios Concurrentes'}</span>
-          </button>
-
-          {testProgressMsg && (
-            <div style={{ marginTop: '16px', background: 'rgba(37, 211, 102, 0.1)', border: '1px solid #25D366', color: '#25D366', padding: '12px', borderRadius: '8px', fontSize: '0.88rem', textAlign: 'center' }}>
-              {testProgressMsg}
-            </div>
-          )}
-
-          {testResults && (
-            <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-                <div style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--gold-primary)' }}>{testResults.totalRequests}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Peticiones Simultáneas</div>
-                </div>
-                <div style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '8px', textAlign: 'center', border: '1px solid #25D366' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#25D366' }}>{testResults.successfulBookings}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Citas Confirmadas</div>
-                </div>
-                <div style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--gold-primary)' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--gold-primary)' }}>{testResults.doubleBookingsPrevented}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Choques Evitados (Lock)</div>
-                </div>
-                <div style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#00EAFF' }}>{testResults.executionTimeMs} ms</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Tiempo Total</div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
