@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Calendar, Clock, CheckCircle, XCircle, AlertTriangle, UserCheck, ShieldAlert,
-  Edit3, Key, Lock, Phone, User, FileText, Check, Plus, Trash2, Scissors
+  Calendar, Clock, CheckCircle2, XCircle, AlertTriangle, User,
+  Phone, Scissors, Edit3, Save, Lock, ShieldAlert, History
 } from 'lucide-react';
 
 export default function BarberPanel({
@@ -16,160 +16,202 @@ export default function BarberPanel({
   setBlockedTimes
 }) {
   const [activeTab, setActiveTab] = useState('agenda');
-  const [filterPeriod, setFilterPeriod] = useState('all'); // 'today' | 'week' | 'all'
-
-  // Change Password Form State
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [passSuccess, setPassSuccess] = useState('');
+  const [filterPeriod, setFilterPeriod] = useState('all');
 
   // Cancel Modal State
   const [cancelModalBooking, setCancelModalBooking] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
 
-  // Block Schedule State
-  const [blockDate, setBlockDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [blockTime, setBlockTime] = useState('12:00 PM');
-  const [blockReason, setBlockReason] = useState('Descanso personal');
+  // Block Time Form State
+  const [blockDate, setBlockDate] = useState('');
+  const [blockTime, setBlockTime] = useState('11:00 AM');
+  const [blockReasonText, setBlockReasonText] = useState('Motivo Personal / Descanso');
 
-  // Edit Barber Profile State
-  const currentBarberProfile = barbersDb.find(b => b.id === currentUser.barberId) || {
+  // Change Password Form State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passSuccess, setPassSuccess] = useState(false);
+
+  // Edit Public Profile State
+  const myProfile = barbersDb.find(b => b.id === currentUser.barberId) || {
     id: currentUser.barberId || 'maicol',
-    name: currentUser.name,
-    nickname: 'Barbero',
+    name: currentUser.name || 'Barbero',
+    nickname: 'Especialista',
+    role: 'Barbero',
     experience: '5+ Años',
-    bio: 'Experto en barbería boutique.',
+    bio: 'Barbero profesional de The Brother.',
     specialties: ['Corte Clásico', 'Fade']
   };
 
-  const [editBio, setEditBio] = useState(currentBarberProfile.bio);
-  const [editSpecialties, setEditSpecialties] = useState(currentBarberProfile.specialties.join(', '));
-  const [editExperience, setEditExperience] = useState(currentBarberProfile.experience);
-  const [profileSuccess, setProfileSuccess] = useState('');
+  const [editBio, setEditBio] = useState(myProfile.bio);
+  const [editExp, setEditExp] = useState(myProfile.experience);
+  const [editSpecs, setEditSpecs] = useState(myProfile.specialties.join(', '));
+  const [profileSaved, setProfileSaved] = useState(false);
 
-  // Filter Bookings FOR THIS BARBER ONLY (Strict No-Peeking Enforcement)
-  const myBarberNameKey = currentUser.barberId === 'maicol' ? 'Maicol' : 'Diego';
-  const myBookings = userBookings.filter(b => b.barberName.includes(myBarberNameKey));
+  // Filter Bookings ASSIGNED EXCLUSIVELY TO THIS BARBER
+  const myBarberName = currentUser.name || 'Maicol';
+  const myAssignedBookings = userBookings.filter(b => {
+    if (currentUser.barberId === 'maicol' || currentUser.username.includes('maicol')) {
+      return b.barberName.includes('Maicol') || b.barberName.includes('Cualquier');
+    }
+    if (currentUser.barberId === 'diego' || currentUser.username.includes('diego')) {
+      return b.barberName.includes('Diego');
+    }
+    return b.barberName.toLowerCase().includes(myBarberName.toLowerCase());
+  });
 
   const todayStr = new Date().toISOString().split('T')[0];
-
-  const filteredBookings = myBookings.filter(b => {
+  const filteredBookings = myAssignedBookings.filter(b => {
     if (filterPeriod === 'today') return b.date === todayStr;
     return true;
   });
 
-  const pendingBookings = filteredBookings.filter(b => b.status === 'Confirmada');
-  const attendedBookings = filteredBookings.filter(b => b.status === 'Completada');
-  const cancelledBookings = filteredBookings.filter(b => b.status === 'Cancelada' || b.status === 'No-Show');
+  // HANDLER: Mark as Completed
+  const handleMarkCompleted = (bookingId) => {
+    setUserBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'Completada' } : b));
+  };
 
-  // HANDLERS
-  const handleMarkStatus = (bookingId, newStatus) => {
-    setUserBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus } : b));
+  // HANDLER: Mark as NO-SHOW (CLIENT NO LLEGÓ) WITH 3-TIMES PERMANENT BLOCK RULE
+  const handleMarkNoShow = (bookingId, clientUsername) => {
+    if (!window.confirm(`¿Marcar cita como 'CLIENTE NO LLEGÓ' (No-Show)?`)) return;
+
+    setUserBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'No-Show' } : b));
+
+    // Update client user no-show count
+    setUsersDb(prev => prev.map(u => {
+      if (u.username.toLowerCase() === clientUsername.toLowerCase()) {
+        const newNoShowCount = (u.noShowCount || 0) + 1;
+
+        if (newNoShowCount >= 3) {
+          alert(`🛑 ATENCIÓN: El cliente @${clientUsername} ha acumulado 3 NO-SHOWS (No asistió). Su cuenta ha sido BLOQUEADA DE FORMA PERMANENTE para agendar citas.`);
+          return {
+            ...u,
+            noShowCount: newNoShowCount,
+            blockedPermanent: true,
+            blockReason: '3+ No-Shows (No asistió a sus citas agendadas)'
+          };
+        } else {
+          alert(`Cita registrada como 'No-Show'. El cliente @${clientUsername} acumula ${newNoShowCount} de 3 faltas antes del bloqueo permanente.`);
+          return {
+            ...u,
+            noShowCount: newNoShowCount
+          };
+        }
+      }
+      return u;
+    }));
+  };
+
+  // HANDLER: Barber Cancel Cita with reason
+  const handleOpenCancelModal = (booking) => {
+    setCancelModalBooking(booking);
+    setCancelReason('');
   };
 
   const handleConfirmCancelWithReason = (e) => {
     e.preventDefault();
-    if (!cancelReason) return;
+    if (!cancelReason.trim()) return;
+
     setUserBookings(prev => prev.map(b => b.id === cancelModalBooking.id ? {
       ...b,
       status: 'Cancelada',
-      cancelReason: cancelReason
+      cancelReason: cancelReason.trim()
     } : b));
+
     setCancelModalBooking(null);
-    setCancelReason('');
   };
 
-  const handleAddBlockedTime = (e) => {
+  // HANDLER: Block Personal Time
+  const handleAddBlockTime = (e) => {
     e.preventDefault();
+    if (!blockDate) return;
+
     const newBlock = {
-      id: 'BLK-' + Date.now(),
-      barberId: currentUser.barberId,
+      id: 'BLOCK-' + Date.now(),
+      barberId: currentUser.barberId || 'maicol',
       date: blockDate,
       time: blockTime,
-      reason: blockReason
+      reason: blockReasonText
     };
+
     setBlockedTimes(prev => [...prev, newBlock]);
-    alert('Horario personal bloqueado correctamente.');
+    setBlockDate('');
+    alert('Horario bloqueado en tu agenda.');
   };
 
-  const handleRemoveBlockedTime = (id) => {
-    setBlockedTimes(prev => prev.filter(b => b.id !== id));
-  };
-
+  // HANDLER: Change Password
   const handleChangePassword = (e) => {
     e.preventDefault();
-    if (oldPassword !== currentUser.password) {
-      alert('La contraseña actual no es correcta.');
+    if (newPassword.length < 6) {
+      alert('La contraseña debe tener al menos 6 caracteres.');
       return;
     }
-    const updatedUser = { ...currentUser, password: newPassword, mustChangePassword: false };
-    setUsersDb(prev => prev.map(u => u.username === currentUser.username ? updatedUser : u));
-    setPassSuccess('Contraseña actualizada correctamente.');
-    setOldPassword('');
-    setNewPassword('');
-    setTimeout(() => setPassSuccess(''), 3000);
+    if (newPassword !== confirmPassword) {
+      alert('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setUsersDb(prev => prev.map(u => u.username === currentUser.username ? {
+      ...u,
+      password: newPassword,
+      mustChangePassword: false
+    } : u));
+
+    setPassSuccess(true);
+    setTimeout(() => setPassSuccess(false), 3000);
   };
 
-  const handleSaveBarberProfile = (e) => {
+  // HANDLER: Save Public Profile
+  const handleSaveProfile = (e) => {
     e.preventDefault();
-    const specs = editSpecialties.split(',').map(s => s.trim()).filter(Boolean);
     const updatedProfile = {
-      ...currentBarberProfile,
+      ...myProfile,
       bio: editBio,
-      experience: editExperience,
-      specialties: specs
+      experience: editExp,
+      specialties: editSpecs.split(',').map(s => s.trim())
     };
-    setBarbersDb(prev => prev.map(b => b.id === currentBarberProfile.id ? updatedProfile : b));
-    setProfileSuccess('Perfil público actualizado correctamente.');
-    setTimeout(() => setProfileSuccess(''), 3000);
-  };
 
-  const myBlockedTimes = blockedTimes.filter(b => b.barberId === currentUser.barberId);
+    setBarbersDb(prev => prev.map(b => b.id === myProfile.id ? updatedProfile : b));
+    setProfileSaved(true);
+    setTimeout(() => setProfileSaved(false), 3000);
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* Password Change Alert for New Barber */}
+      {/* Barber Must Change Password Warning Banner */}
       {currentUser.mustChangePassword && (
-        <div style={{ background: 'rgba(255, 170, 0, 0.12)', border: '1px solid #FFAA00', padding: '12px 16px', borderRadius: '10px', color: '#FFAA00', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={18} />
-            <span><strong>Primer Inicio de Sesión:</strong> Se requiere que cambies tu contraseña temporal por seguridad.</span>
+        <div style={{ background: 'rgba(255, 170, 0, 0.12)', border: '1px solid #FFAA00', padding: '14px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle color="#FFAA00" size={22} />
+            <div>
+              <div style={{ fontWeight: 800, color: '#FFAA00', fontSize: '0.9rem' }}>Primer Inicio de Sesión</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-main)' }}>Por seguridad, por favor cambia tu contraseña temporal.</div>
+            </div>
           </div>
-          <button onClick={() => setActiveTab('security')} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.78rem' }}>
-            Cambiar Ahora
+          <button onClick={() => setActiveTab('password')} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>
+            Cambiar Clave
           </button>
         </div>
       )}
 
-      {/* Barber Navigation Tabs */}
+      {/* Panel Navigation Tabs */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', background: 'var(--bg-dark)', padding: '6px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
         <button
           onClick={() => setActiveTab('agenda')}
           style={{
-            flex: 1, minWidth: '100px', padding: '8px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
+            flex: 1, minWidth: '110px', padding: '8px 12px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
             background: activeTab === 'agenda' ? 'rgba(197, 160, 89, 0.2)' : 'transparent',
             color: activeTab === 'agenda' ? 'var(--gold-primary)' : 'var(--text-muted)'
           }}
         >
-          📅 Mi Agenda ({pendingBookings.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('history')}
-          style={{
-            flex: 1, minWidth: '100px', padding: '8px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
-            background: activeTab === 'history' ? 'rgba(197, 160, 89, 0.2)' : 'transparent',
-            color: activeTab === 'history' ? 'var(--gold-primary)' : 'var(--text-muted)'
-          }}
-        >
-          📜 Atendidas ({attendedBookings.length})
+          📅 Mi Agenda ({filteredBookings.length})
         </button>
 
         <button
           onClick={() => setActiveTab('block_time')}
           style={{
-            flex: 1, minWidth: '110px', padding: '8px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
+            flex: 1, minWidth: '110px', padding: '8px 12px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
             background: activeTab === 'block_time' ? 'rgba(197, 160, 89, 0.2)' : 'transparent',
             color: activeTab === 'block_time' ? 'var(--gold-primary)' : 'var(--text-muted)'
           }}
@@ -180,162 +222,83 @@ export default function BarberPanel({
         <button
           onClick={() => setActiveTab('profile')}
           style={{
-            flex: 1, minWidth: '100px', padding: '8px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
+            flex: 1, minWidth: '110px', padding: '8px 12px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
             background: activeTab === 'profile' ? 'rgba(197, 160, 89, 0.2)' : 'transparent',
             color: activeTab === 'profile' ? 'var(--gold-primary)' : 'var(--text-muted)'
           }}
         >
-          👤 Perfil Público
+          👤 Mi Perfil Web
         </button>
 
         <button
-          onClick={() => setActiveTab('security')}
+          onClick={() => setActiveTab('password')}
           style={{
-            padding: '8px 12px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
-            background: activeTab === 'security' ? 'rgba(197, 160, 89, 0.2)' : 'transparent',
-            color: activeTab === 'security' ? 'var(--gold-primary)' : 'var(--text-muted)'
+            flex: 1, minWidth: '100px', padding: '8px 12px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none',
+            background: activeTab === 'password' ? 'rgba(197, 160, 89, 0.2)' : 'transparent',
+            color: activeTab === 'password' ? 'var(--gold-primary)' : 'var(--text-muted)'
           }}
         >
-          🔒 Seguridad
+          🔑 Seguridad
         </button>
       </div>
 
-      {/* TAB 1: AGENDA DE CITAS DEL BARBERO */}
+      {/* AGENDA TAB */}
       {activeTab === 'agenda' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              Agenda Personal de {currentUser.name}
+              Citas Asignadas A Mí
             </h4>
             <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                onClick={() => setFilterPeriod('all')}
-                style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', background: filterPeriod === 'all' ? 'var(--gold-primary)' : 'var(--bg-dark)', color: filterPeriod === 'all' ? '#0A0A0C' : 'var(--text-muted)', border: 'none', fontWeight: 700, cursor: 'pointer' }}
-              >
+              <button onClick={() => setFilterPeriod('all')} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: filterPeriod === 'all' ? 'var(--gold-primary)' : 'transparent', color: filterPeriod === 'all' ? '#0A0A0C' : 'var(--text-muted)' }}>
                 Todas
               </button>
-              <button
-                onClick={() => setFilterPeriod('today')}
-                style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', background: filterPeriod === 'today' ? 'var(--gold-primary)' : 'var(--bg-dark)', color: filterPeriod === 'today' ? '#0A0A0C' : 'var(--text-muted)', border: 'none', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Hoy
+              <button onClick={() => setFilterPeriod('today')} style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: filterPeriod === 'today' ? 'var(--gold-primary)' : 'transparent', color: filterPeriod === 'today' ? '#0A0A0C' : 'var(--text-muted)' }}>
+                Solo Hoy
               </button>
             </div>
           </div>
 
-          {pendingBookings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-              <Calendar size={32} color="var(--gold-primary)" style={{ opacity: 0.5, marginBottom: '8px' }} />
-              <div>No tienes citas pendientes agendadas.</div>
+          {filteredBookings.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: '10px' }}>
+              No tienes citas agendadas en este filtro.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {pendingBookings.map((b) => (
-                <div
-                  key={b.id}
-                  style={{
-                    background: 'var(--bg-dark)',
-                    border: '1px solid var(--border-gold)',
-                    borderRadius: '10px',
-                    padding: '18px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--gold-primary)' }}>{b.id}</span>
-                    <span style={{ fontSize: '0.75rem', background: 'rgba(197, 160, 89, 0.15)', color: 'var(--gold-primary)', padding: '3px 10px', borderRadius: '99px', fontWeight: 700 }}>
-                      Pendiente
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {filteredBookings.map(b => (
+                <div key={b.id} style={{ background: 'var(--bg-dark)', padding: '16px', borderRadius: '10px', border: b.status === 'Confirmada' ? '1px solid var(--border-gold)' : '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--gold-primary)', fontWeight: 800 }}>{b.id}</span>
+                      <h5 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)' }}>{b.serviceName} ({b.servicePrice})</h5>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', padding: '3px 8px', borderRadius: '6px', fontWeight: 700, background: b.status === 'Confirmada' ? 'rgba(37, 211, 102, 0.15)' : b.status === 'Completada' ? 'rgba(197, 160, 89, 0.2)' : 'rgba(255, 85, 85, 0.15)', color: b.status === 'Confirmada' ? '#25D366' : b.status === 'Completada' ? 'var(--gold-primary)' : '#FF5555' }}>
+                      {b.status}
                     </span>
                   </div>
 
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                    {b.serviceName} <span style={{ color: 'var(--gold-primary)' }}>({b.servicePrice})</span>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+                    <div>👤 <strong>Cliente:</strong> @{b.username}</div>
+                    <div>📅 <strong>Fecha:</strong> {b.date} {b.time}</div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    <div>👤 <strong>Cliente:</strong> {b.username}</div>
-                    <div>📱 <strong>Celular:</strong> +51 987654321</div>
-                    <div>📅 <strong>Fecha:</strong> {b.date}</div>
-                    <div>⏰ <strong>Hora:</strong> {b.time}</div>
-                  </div>
+                  {b.status === 'Confirmada' && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed var(--border-subtle)' }}>
+                      <button onClick={() => handleMarkCompleted(b.id)} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>
+                        <CheckCircle2 size={14} />
+                        <span>Marcar Atendida</span>
+                      </button>
+                      
+                      <button onClick={() => handleMarkNoShow(b.id, b.username)} style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(255, 85, 85, 0.12)', border: '1px solid #FF5555', color: '#FF5555', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 700 }}>
+                        <XCircle size={14} />
+                        <span>No Llegó (No-Show)</span>
+                      </button>
 
-                  {/* Actions for Barber */}
-                  <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    <button
-                      onClick={() => handleMarkStatus(b.id, 'Completada')}
-                      style={{ flex: 1, padding: '8px', borderRadius: '6px', background: 'rgba(37, 211, 102, 0.15)', border: '1px solid #25D366', color: '#25D366', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
-                    >
-                      <CheckCircle size={14} />
-                      <span>Completada</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleMarkStatus(b.id, 'No-Show')}
-                      style={{ flex: 1, padding: '8px', borderRadius: '6px', background: 'rgba(255, 170, 0, 0.15)', border: '1px solid #FFAA00', color: '#FFAA00', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
-                    >
-                      <XCircle size={14} />
-                      <span>No Llegó (No-Show)</span>
-                    </button>
-
-                    <button
-                      onClick={() => setCancelModalBooking(b)}
-                      style={{ padding: '8px 12px', borderRadius: '6px', background: 'rgba(255, 85, 85, 0.1)', border: '1px solid rgba(255, 85, 85, 0.3)', color: '#FF5555', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Cancel Reason Modal */}
-          {cancelModalBooking && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-              <form onSubmit={handleConfirmCancelWithReason} style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '12px', border: '1px solid #FF5555', width: '100%', maxWidth: '420px' }}>
-                <h4 style={{ color: '#FF5555', fontWeight: 800, marginBottom: '10px' }}>Cancelar Cita ({cancelModalBooking.id})</h4>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '14px' }}>
-                  Especifica el motivo de la cancelación para registrarlo en el sistema.
-                </p>
-                <textarea
-                  rows="3"
-                  placeholder="Ej: Emergencia del barbero / Inclemencia climática"
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  required
-                  style={{ width: '100%', padding: '10px', background: 'var(--bg-dark)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px', marginBottom: '14px' }}
-                />
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" onClick={() => setCancelModalBooking(null)} className="btn btn-secondary" style={{ flex: 1, padding: '8px' }}>Volver</button>
-                  <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '8px', background: '#FF5555', color: '#FFF' }}>Confirmar Cancelación</button>
-                </div>
-              </form>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 2: HISTORIAL DE CITAS ATENDIDAS */}
-      {activeTab === 'history' && (
-        <div>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '16px' }}>
-            Historial de Citas Atendidas / Finalizadas
-          </h4>
-          {attendedBookings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: '10px' }}>
-              No tienes citas completadas registradas en el historial.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {attendedBookings.map(b => (
-                <div key={b.id} style={{ background: 'var(--bg-dark)', border: '1px solid var(--border-subtle)', padding: '14px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>{b.serviceName} ({b.servicePrice})</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cliente: {b.username} | 📅 {b.date} {b.time}</div>
-                  </div>
-                  <span style={{ color: '#25D366', fontWeight: 800, fontSize: '0.8rem' }}>✓ Completada</span>
+                      <button onClick={() => handleOpenCancelModal(b)} style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        Cancelar con Motivo
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -343,116 +306,78 @@ export default function BarberPanel({
         </div>
       )}
 
-      {/* TAB 3: BLOQUEAR HORARIOS PERSONALES */}
-      {activeTab === 'block_time' && (
-        <div>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>
-            Bloquear Horario Personal (Ausencia / Descanso)
-          </h4>
-          <form onSubmit={handleAddBlockedTime} style={{ background: 'var(--bg-dark)', padding: '18px', borderRadius: '10px', border: '1px solid var(--border-subtle)', marginBottom: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Fecha a Bloquear</label>
-                <input type="date" value={blockDate} onChange={(e) => setBlockDate(e.target.value)} style={{ width: '100%', padding: '8px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Hora</label>
-                <input type="text" value={blockTime} onChange={(e) => setBlockTime(e.target.value)} placeholder="Ej: 12:00 PM o Todo el Día" style={{ width: '100%', padding: '8px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
-              </div>
-            </div>
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Motivo (Opcional)</label>
-              <input type="text" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="Ej: Capacitación / Asunto personal" style={{ width: '100%', padding: '8px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '10px' }}>
-              <Plus size={16} />
-              <span>Guardar Bloqueo de Horario</span>
-            </button>
-          </form>
-
-          {/* List of Blocked Times */}
-          <h5 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '10px' }}>Mis Horarios Bloqueados</h5>
-          {myBlockedTimes.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No tienes horarios bloqueados.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {myBlockedTimes.map(blk => (
-                <div key={blk.id} style={{ background: 'var(--bg-dark)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                    📅 <strong>{blk.date}</strong> a las <strong>{blk.time}</strong> — <em>{blk.reason}</em>
-                  </div>
-                  <button onClick={() => handleRemoveBlockedTime(blk.id)} style={{ background: 'none', border: 'none', color: '#FF5555', cursor: 'pointer' }}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 4: PERFIL PÚBLICO DEL BARBERO */}
-      {activeTab === 'profile' && (
-        <form onSubmit={handleSaveBarberProfile} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)' }}>
-            Editar Perfil Público en "Nuestros Barberos"
-          </h4>
-
-          {profileSuccess && (
-            <div style={{ background: 'rgba(37, 211, 102, 0.12)', border: '1px solid #25D366', color: '#25D366', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', textAlign: 'center' }}>
-              ✓ {profileSuccess}
-            </div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Años de Experiencia</label>
-            <input type="text" value={editExperience} onChange={(e) => setEditExperience(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-dark)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
+      {/* CANCEL REASON MODAL */}
+      {cancelModalBooking && (
+        <form onSubmit={handleConfirmCancelWithReason} style={{ background: 'var(--bg-dark)', padding: '18px', borderRadius: '10px', border: '1px solid #FF5555' }}>
+          <h5 style={{ color: '#FF5555', fontWeight: 800, marginBottom: '8px' }}>Cancelar Cita {cancelModalBooking.id}</h5>
+          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Ingresa la razón de cancelación:</label>
+          <input type="text" required value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Ej: Imprevisto de fuerza mayor / Cliente solicitó cambio" style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px', marginBottom: '12px' }} />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" onClick={() => setCancelModalBooking(null)} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
+            <button type="submit" className="btn btn-primary" style={{ flex: 1, background: '#FF5555' }}>Confirmar Cancelación</button>
           </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Biografía / Presentación Corta</label>
-            <textarea rows="3" value={editBio} onChange={(e) => setEditBio(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-dark)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Especialidades (Separadas por coma)</label>
-            <input type="text" value={editSpecialties} onChange={(e) => setEditSpecialties(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-dark)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
-          </div>
-
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-            <Edit3 size={16} />
-            <span>Guardar Cambios en la Web</span>
-          </button>
         </form>
       )}
 
-      {/* TAB 5: SEGURIDAD (CAMBIO DE CONTRASEÑA) */}
-      {activeTab === 'security' && (
-        <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)' }}>
-            Cambiar Contraseña de Barbero
-          </h4>
-
-          {passSuccess && (
-            <div style={{ background: 'rgba(37, 211, 102, 0.12)', border: '1px solid #25D366', color: '#25D366', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', textAlign: 'center' }}>
-              ✓ {passSuccess}
+      {/* BLOCK TIME TAB */}
+      {activeTab === 'block_time' && (
+        <form onSubmit={handleAddBlockTime} style={{ background: 'var(--bg-dark)', padding: '20px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '12px' }}>Bloquear Horario Personal en Mi Agenda</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Fecha</label>
+              <input type="date" required value={blockDate} onChange={e => setBlockDate(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
             </div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Contraseña Actual</label>
-            <input type="password" required value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-dark)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Hora</label>
+              <select value={blockTime} onChange={e => setBlockTime(e.target.value)} style={{ width: '100%', padding: '11px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }}>
+                {['09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM'].map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
           </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Motivo</label>
+            <input type="text" value={blockReasonText} onChange={e => setBlockReasonText(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Registrar Bloqueo de Horario</button>
+        </form>
+      )}
 
-          <div>
+      {/* EDIT PROFILE TAB */}
+      {activeTab === 'profile' && (
+        <form onSubmit={handleSaveProfile} style={{ background: 'var(--bg-dark)', padding: '20px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>Editar Mi Perfil Público (Sección Nuestros Barberos)</h4>
+          {profileSaved && <div style={{ color: '#25D366', fontSize: '0.85rem', marginBottom: '10px' }}>✓ Perfil actualizado en la web pública.</div>}
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Años de Experiencia</label>
+            <input type="text" value={editExp} onChange={e => setEditExp(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Especialidades (separadas por coma)</label>
+            <input type="text" value={editSpecs} onChange={e => setEditSpecs(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Biografía Pública</label>
+            <textarea rows="3" value={editBio} onChange={e => setEditBio(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Guardar Cambios en la Web</button>
+        </form>
+      )}
+
+      {/* CHANGE PASSWORD TAB */}
+      {activeTab === 'password' && (
+        <form onSubmit={handleChangePassword} style={{ background: 'var(--bg-dark)', padding: '20px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>Cambiar Mi Contraseña</h4>
+          {passSuccess && <div style={{ color: '#25D366', fontSize: '0.85rem', marginBottom: '10px' }}>✓ Contraseña actualizada correctamente.</div>}
+          <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Nueva Contraseña</label>
-            <input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-dark)', border: '1px solid var(--border-gold)', color: 'var(--text-main)', borderRadius: '6px' }} />
+            <input type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
           </div>
-
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-            <Key size={16} />
-            <span>Actualizar Contraseña</span>
-          </button>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Confirmar Nueva Contraseña</label>
+            <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', borderRadius: '6px' }} />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Actualizar Contraseña</button>
         </form>
       )}
 

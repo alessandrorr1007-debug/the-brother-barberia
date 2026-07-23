@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Calendar, Users, Scissors, DollarSign, BarChart3, ShieldCheck, UserPlus,
-  Edit3, Trash2, Unlock, AlertTriangle, CheckCircle, Plus, Eye, FileText, Zap, Cpu, Info
+  Edit3, Trash2, Unlock, AlertTriangle, CheckCircle, Plus, Eye, FileText, Zap, Cpu, Info, ShieldAlert
 } from 'lucide-react';
 import { run200UserConcurrencyStressTest } from '../utils/concurrencyTest';
 
@@ -37,7 +37,6 @@ export default function AdminPanel({
   // Edit Web Content State
   const [aboutHistoryText, setAboutHistoryText] = useState(webContent?.history || 'The Brother nace de la pasión de Maicol...');
   const [scheduleText, setScheduleText] = useState(webContent?.schedule || 'Lunes a Sábado: 9am - 9pm');
-  const [contentSuccess, setContentSuccess] = useState('');
 
   // Stress Test State
   const [isRunningTest, setIsRunningTest] = useState(false);
@@ -45,8 +44,8 @@ export default function AdminPanel({
   const [testResults, setTestResults] = useState(null);
 
   // Financial Estimation Report Filters
-  const [revBarberFilter, setRevBarberFilter] = useState('all'); // 'all' | 'maicol' | 'diego'
-  const [revPeriodFilter, setRevPeriodFilter] = useState('all'); // 'today' | 'week' | 'month' | 'all'
+  const [revBarberFilter, setRevBarberFilter] = useState('all');
+  const [revPeriodFilter, setRevPeriodFilter] = useState('all');
 
   // HANDLERS: Stress Test
   const handleRunStressTest = async () => {
@@ -118,13 +117,18 @@ export default function AdminPanel({
     }
   };
 
+  // MASTER UNBLOCK HANDLER (TEMPORARY OR PERMANENT)
   const handleUnblockClient = (username) => {
     setUsersDb(prev => prev.map(u => u.username === username ? {
       ...u,
       cancellationCount: 0,
-      blockedUntil: null
+      cancellationCycles: 0,
+      noShowCount: 0,
+      blockedUntil: null,
+      blockedPermanent: false,
+      blockReason: null
     } : u));
-    alert(`Cliente @${username} ha sido desbloqueado.`);
+    alert(`Cliente @${username} ha sido DESBLOQUEADO por el Administrador. Ya puede reservar con normalidad.`);
   };
 
   const handleStartEditService = (s) => {
@@ -145,43 +149,32 @@ export default function AdminPanel({
     setEditingServiceId(null);
   };
 
-  const handleSaveWebContent = (e) => {
-    e.preventDefault();
-    setWebContent({
-      history: aboutHistoryText,
-      schedule: scheduleText
-    });
-    setContentSuccess('Contenido general de la web actualizado.');
-    setTimeout(() => setContentSuccess(''), 3000);
-  };
-
   // Metrics & Financial Calculations
   const totalBookings = userBookings.length;
   const completedBookingsList = userBookings.filter(b => b.status === 'Completada' || b.status === 'Atendida');
   const cancelledBookings = userBookings.filter(b => b.status === 'Cancelada').length;
-  const blockedClients = usersDb.filter(u => u.blockedUntil && new Date().getTime() < new Date(u.blockedUntil).getTime());
   const barberAccounts = usersDb.filter(u => u.role === 'barber');
+
+  // Filtered Blocked Clients List (Both Temporary and Permanent)
+  const allBlockedClients = usersDb.filter(u => 
+    u.blockedPermanent === true || 
+    (u.blockedUntil && new Date().getTime() < new Date(u.blockedUntil).getTime())
+  );
 
   // Filtered Completed Bookings for Revenue Calculation
   const filteredCompletedBookings = completedBookingsList.filter(b => {
-    // Barber Filter
     if (revBarberFilter === 'maicol' && !b.barberName.includes('Maicol')) return false;
     if (revBarberFilter === 'diego' && !b.barberName.includes('Diego')) return false;
-
-    // Period Filter
     const todayStr = new Date().toISOString().split('T')[0];
     if (revPeriodFilter === 'today' && b.date !== todayStr) return false;
-
     return true;
   });
 
-  // Calculate Total Estimated Revenue
   const totalEstimatedRevenue = filteredCompletedBookings.reduce((sum, b) => {
     const numericPrice = parseInt((b.servicePrice || '0').replace(/[^0-9]/g, ''), 10) || 0;
     return sum + numericPrice;
   }, 0);
 
-  // Group by Service
   const serviceBreakdown = {};
   filteredCompletedBookings.forEach(b => {
     const sName = b.serviceName || 'Corte General';
@@ -257,19 +250,67 @@ export default function AdminPanel({
           onClick={() => setAdminTab('clients')}
           style={{
             flex: 1, minWidth: '95px', padding: '8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', border: 'none',
-            background: adminTab === 'clients' ? 'rgba(197, 160, 89, 0.2)' : 'transparent',
-            color: adminTab === 'clients' ? 'var(--gold-primary)' : 'var(--text-muted)'
+            background: adminTab === 'clients' ? 'rgba(255, 85, 85, 0.2)' : 'transparent',
+            color: adminTab === 'clients' ? '#FF5555' : 'var(--text-muted)'
           }}
         >
-          🚫 Bloqueados
+          🚫 Bloqueados ({allBlockedClients.length})
         </button>
       </div>
 
-      {/* TAB: ESTIMADO DE INGRESOS WEB Y REPORTES */}
+      {/* CLIENTS TAB (TEMPORARY & PERMANENT BLOCKS) */}
+      {adminTab === 'clients' && (
+        <div>
+          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>
+            Gestión de Clientes Bloqueados (Temporales & Permanentes)
+          </h4>
+
+          {allBlockedClients.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: '10px' }}>
+              ✓ No hay ningún cliente bloqueado actualmente.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {allBlockedClients.map(u => {
+                const isPerm = u.blockedPermanent === true;
+                return (
+                  <div key={u.username} style={{ background: 'var(--bg-dark)', padding: '16px 18px', borderRadius: '10px', border: isPerm ? '1px solid #FF5555' : '1px solid #FFAA00', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, color: isPerm ? '#FF5555' : '#FFAA00', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <ShieldAlert size={18} />
+                        <span>@{u.username} ({u.phone})</span>
+                        <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '99px', background: isPerm ? '#FF5555' : '#FFAA00', color: '#0A0A0C', textTransform: 'uppercase', fontWeight: 800 }}>
+                          {isPerm ? '🛑 Bloqueo Permanente' : '⏳ Temporal (1 Semana)'}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        📌 <strong>Motivo:</strong> {u.blockReason || (isPerm ? 'Incumplimiento de términos' : '3 Cancelaciones acumuladas')}
+                      </div>
+
+                      {!isPerm && u.blockedUntil && (
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-gold)', marginTop: '2px' }}>
+                          📅 Expira el: {new Date(u.blockedUntil).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </div>
+                      )}
+                    </div>
+
+                    <button onClick={() => handleUnblockClient(u.username)} className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.78rem' }}>
+                      <Unlock size={14} />
+                      <span>Desbloquear Cliente</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* REPORTS TAB */}
       {adminTab === 'reports' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Top Metrics Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
             <div style={{ background: 'var(--bg-dark)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--gold-primary)' }}>{totalBookings}</div>
@@ -289,7 +330,6 @@ export default function AdminPanel({
             </div>
           </div>
 
-          {/* FINANCIAL ESTIMATOR BOX */}
           <div style={{ background: 'var(--bg-dark)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-gold)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
               <div>
@@ -302,7 +342,6 @@ export default function AdminPanel({
                 </span>
               </div>
 
-              {/* Filters: Barber & Period */}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <select
                   value={revBarberFilter}
@@ -325,7 +364,6 @@ export default function AdminPanel({
               </div>
             </div>
 
-            {/* Total Display Banner */}
             <div style={{ background: 'rgba(197, 160, 89, 0.12)', border: '1px dashed var(--border-gold)', padding: '16px 20px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
               <div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
@@ -340,7 +378,6 @@ export default function AdminPanel({
               </div>
             </div>
 
-            {/* Breakdown by Service */}
             <h5 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '10px' }}>Desglose por Servicio Reservado:</h5>
             {Object.keys(serviceBreakdown).length === 0 ? (
               <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No hay citas completadas en el filtro seleccionado.</div>
@@ -358,16 +395,13 @@ export default function AdminPanel({
               </div>
             )}
 
-            {/* Clear Payment Disclaimer Notice */}
             <div style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-subtle)', padding: '12px 14px', borderRadius: '8px', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5, display: 'flex', gap: '8px' }}>
               <Info size={18} color="var(--gold-primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
                 <strong>Aviso de Negocio:</strong> Los pagos se abonan directamente a cada barbero en la barbería (efectivo / Yape). Esta cifra representa un <em>cálculo estimado basado en las citas agendadas por la web</em>. No incluye clientes atendidos de forma directa en el local sin reserva previa.
               </div>
             </div>
-
           </div>
-
         </div>
       )}
 
@@ -565,38 +599,6 @@ export default function AdminPanel({
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* CLIENTS TAB */}
-      {adminTab === 'clients' && (
-        <div>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>
-            Clientes Bloqueados (Regla 3 Cancelaciones)
-          </h4>
-
-          {blockedClients.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: '10px' }}>
-              ✓ No hay ningún cliente bloqueado actualmente.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {blockedClients.map(u => (
-                <div key={u.username} style={{ background: 'var(--bg-dark)', padding: '14px 18px', borderRadius: '8px', border: '1px solid #FF5555', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 800, color: '#FF5555' }}>@{u.username} ({u.phone})</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      Bloqueado hasta: {new Date(u.blockedUntil).toLocaleDateString('es-PE')}
-                    </div>
-                  </div>
-                  <button onClick={() => handleUnblockClient(u.username)} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>
-                    <Unlock size={14} />
-                    <span>Desbloquear Ahora</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

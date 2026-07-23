@@ -58,7 +58,11 @@ export default function BookingModal({
       phone: '+51 999 888 777',
       verified: true,
       cancellationCount: 0,
-      blockedUntil: null
+      cancellationCycles: 0,
+      noShowCount: 0,
+      blockedUntil: null,
+      blockedPermanent: false,
+      blockReason: null
     }
   ];
 
@@ -68,7 +72,6 @@ export default function BookingModal({
     if (!saved) return defaultAccounts;
     try {
       const parsed = JSON.parse(saved);
-      // Merge default accounts if missing in localStorage
       const merged = [...parsed];
       defaultAccounts.forEach(defAcc => {
         if (!merged.some(u => u.username.toLowerCase() === defAcc.username.toLowerCase())) {
@@ -156,6 +159,23 @@ export default function BookingModal({
     }
   }, [currentUser]);
 
+  // Check and Auto-Unblock 1-Week Cancellation Penalty (Only if NOT permanent)
+  useEffect(() => {
+    if (currentUser && currentUser.blockedUntil && !currentUser.blockedPermanent) {
+      const now = Date.now();
+      const unblockTime = new Date(currentUser.blockedUntil).getTime();
+      if (now >= unblockTime) {
+        const unblockedUser = {
+          ...currentUser,
+          cancellationCount: 0,
+          blockedUntil: null
+        };
+        setCurrentUser(unblockedUser);
+        setUsersDb(prev => prev.map(u => u.username === unblockedUser.username ? unblockedUser : u));
+      }
+    }
+  }, [currentUser]);
+
   // Sync Initial Parameters when Modal Opens
   useEffect(() => {
     if (isOpen) {
@@ -230,9 +250,13 @@ export default function BookingModal({
     });
   };
 
-  const isUserBlocked = currentUser?.blockedUntil && new Date().getTime() < new Date(currentUser.blockedUntil).getTime();
+  const isUserTempBlocked = currentUser?.blockedUntil && new Date().getTime() < new Date(currentUser.blockedUntil).getTime();
+  const isUserPermanentlyBlocked = currentUser?.blockedPermanent === true;
 
-  // ==================== FLEXIBLE LOGIN HANDLER ====================
+  // Helper to normalize phone digits (removes spaces, +, etc.)
+  const normalizePhone = (phoneStr) => (phoneStr || '').replace(/[^0-9]/g, '');
+
+  // ==================== LOGIN HANDLER ====================
 
   const handleLoginSubmit = (e) => {
     e.preventDefault();
@@ -240,13 +264,11 @@ export default function BookingModal({
 
     const inputClean = loginUsername.trim().toLowerCase();
 
-    // 1. Search in current memory state or fallback default accounts
     let found = usersDb.find(u => 
       u.username.toLowerCase() === inputClean || 
       (u.email && u.email.toLowerCase() === inputClean)
     );
 
-    // If not found in usersDb, check default accounts fallback
     if (!found) {
       found = defaultAccounts.find(u => u.username.toLowerCase() === inputClean);
     }
@@ -266,7 +288,6 @@ export default function BookingModal({
       verified: true
     };
 
-    // Ensure account exists in usersDb
     if (!usersDb.some(u => u.username.toLowerCase() === authenticatedUser.username.toLowerCase())) {
       setUsersDb(prev => [...prev, authenticatedUser]);
     }
@@ -277,18 +298,28 @@ export default function BookingModal({
     setPanelTab('new_booking');
   };
 
-  // CLIENT PUBLIC REGISTRATION ONLY
+  // CLIENT REGISTRATION WITH PERMANENTLY BLOCKED PHONE NUMBER PREVENTION
   const handleRegisterDataSubmit = (e) => {
     e.preventDefault();
     setLoginError('');
+
+    const cleanInputPhone = normalizePhone(regPhone);
 
     if (usersDb.some(u => u.username.toLowerCase() === regUsername.trim().toLowerCase())) {
       alert('Ese nombre de usuario ya existe. Por favor elige otro.');
       return;
     }
 
-    if (regPhone.trim().length < 8) {
+    if (cleanInputPhone.length < 8) {
       alert('Por favor ingresa un número de celular válido.');
+      return;
+    }
+
+    // CHECK IF THIS PHONE NUMBER BELONGS TO A PERMANENTLY BLOCKED ACCOUNT
+    const isPhoneBlocked = usersDb.some(u => u.blockedPermanent === true && normalizePhone(u.phone) === cleanInputPhone);
+
+    if (isPhoneBlocked) {
+      alert(`🛑 REGISTRO DENEGADO: El número de celular (+51 ${regPhone}) está bloqueado de forma permanente para realizar reservas por incumplimiento en el servicio. Debes utilizar un número diferente.`);
       return;
     }
 
@@ -302,7 +333,11 @@ export default function BookingModal({
       phone: regPhone.trim(),
       verified: false,
       cancellationCount: 0,
-      blockedUntil: null
+      cancellationCycles: 0,
+      noShowCount: 0,
+      blockedUntil: null,
+      blockedPermanent: false,
+      blockReason: null
     });
     setAuthMode('REGISTER_OTP');
   };
@@ -336,6 +371,15 @@ export default function BookingModal({
       alert('Por favor ingresa un número de celular válido.');
       return;
     }
+
+    const cleanInputPhone = normalizePhone(editPhone);
+    const isPhoneBlocked = usersDb.some(u => u.username !== currentUser.username && u.blockedPermanent === true && normalizePhone(u.phone) === cleanInputPhone);
+
+    if (isPhoneBlocked) {
+      alert(`🛑 No puedes cambiar tu número al celular +51 ${editPhone} porque se encuentra bloqueado permanentemente.`);
+      return;
+    }
+
     const updated = { ...currentUser, phone: editPhone.trim() };
     setCurrentUser(updated);
     setUsersDb(prev => prev.map(u => u.username === updated.username ? updated : u));
@@ -345,7 +389,12 @@ export default function BookingModal({
   const handleCreateBooking = (e) => {
     e.preventDefault();
 
-    if (isUserBlocked) {
+    if (isUserPermanentlyBlocked) {
+      alert(`🛑 Tu cuenta está bloqueada de forma permanente para realizar reservas due a: ${currentUser.blockReason || 'Incumplimiento de políticas'}.`);
+      return;
+    }
+
+    if (isUserTempBlocked) {
       alert(`Has cancelado 3 citas. No podrás reservar hasta el ${getFormattedBlockDate(currentUser.blockedUntil)}.`);
       return;
     }
@@ -367,25 +416,47 @@ export default function BookingModal({
     setCreatedTicket(newBooking);
   };
 
+  // CANCELLATION HANDLER WITH REINCIDENCE PERMANENT BLOCK
   const handleCancelBooking = (bookingId) => {
     if (!window.confirm('¿Seguro que deseas cancelar esta reserva?')) return;
 
     setUserBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'Cancelada' } : b));
 
     const currentCount = (currentUser.cancellationCount || 0) + 1;
+    const currentCycles = (currentUser.cancellationCycles || 0);
 
     if (currentCount >= 3) {
-      const blockDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const blockedUser = {
-        ...currentUser,
-        cancellationCount: 0,
-        blockedUntil: blockDate.toISOString()
-      };
+      const newCycles = currentCycles + 1;
 
-      setCurrentUser(blockedUser);
-      setUsersDb(prev => prev.map(u => u.username === blockedUser.username ? blockedUser : u));
+      // REINCIDENCE CHECK: IF ALREADY HAD 1 CYCLE AND ACCUMULATES 3 CANCELLATIONS AGAIN -> PERMANENT BLOCK
+      if (newCycles >= 2) {
+        const permBlockedUser = {
+          ...currentUser,
+          cancellationCount: currentCount,
+          cancellationCycles: newCycles,
+          blockedPermanent: true,
+          blockReason: 'Reincidencia en cancelaciones (6+ cancelaciones totales)'
+        };
 
-      alert(`⚠️ Has acumulado 3 cancelaciones. Tu capacidad para realizar nuevas reservas ha sido bloqueada por 1 semana (hasta el ${getFormattedBlockDate(blockDate.toISOString())}). Aún puedes iniciar sesión y ver tu historial.`);
+        setCurrentUser(permBlockedUser);
+        setUsersDb(prev => prev.map(u => u.username === permBlockedUser.username ? permBlockedUser : u));
+
+        alert(`🛑 BLOQUEO PERMANENTE: Has acumulado 3 cancelaciones por segunda vez. Tu cuenta y número de celular han sido BLOQUEADOS DE FORMA PERMANENTE para agendar nuevas citas.`);
+      } else {
+        // FIRST TIME: TEMPORARY 1-WEEK BLOCK
+        const blockDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const tempBlockedUser = {
+          ...currentUser,
+          cancellationCount: 0,
+          cancellationCycles: newCycles,
+          blockedUntil: blockDate.toISOString()
+        };
+
+        setCurrentUser(tempBlockedUser);
+        setUsersDb(prev => prev.map(u => u.username === tempBlockedUser.username ? tempBlockedUser : u));
+
+        alert(`⚠️ Has acumulado 3 cancelaciones. Tu capacidad para realizar nuevas reservas ha sido bloqueada por 1 semana (hasta el ${getFormattedBlockDate(blockDate.toISOString())}). Aún puedes iniciar sesión y ver tu historial.`);
+      }
     } else {
       const updatedUser = {
         ...currentUser,
@@ -414,7 +485,7 @@ export default function BookingModal({
 
   const myBookings = currentUser ? userBookings.filter(b => b.username === currentUser.username) : [];
   const upcomingBookings = myBookings.filter(b => b.status === 'Confirmada');
-  const historyBookings = myBookings.filter(b => b.status === 'Cancelada' || b.status === 'Finalizada' || b.status === 'Completada');
+  const historyBookings = myBookings.filter(b => b.status === 'Cancelada' || b.status === 'Finalizada' || b.status === 'Completada' || b.status === 'No-Show');
 
   return (
     <div style={{
@@ -847,11 +918,22 @@ export default function BookingModal({
 
                   {panelTab === 'new_booking' && (
                     <div>
-                      {isUserBlocked ? (
+                      {isUserPermanentlyBlocked ? (
+                        <div style={{ background: 'rgba(255, 85, 85, 0.12)', border: '1px solid #FF5555', borderRadius: '12px', padding: '24px 20px', textAlign: 'center', marginBottom: '16px' }}>
+                          <ShieldAlert size={36} color="#FF5555" style={{ marginBottom: '12px' }} />
+                          <h4 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF5555', marginBottom: '8px' }}>Cuenta Bloqueada Permanentemente</h4>
+                          <p style={{ color: 'var(--text-main)', fontSize: '0.92rem', marginBottom: '16px', lineHeight: 1.5 }}>
+                            Tu cuenta ha sido bloqueada de forma permanente para agendar citas en The Brother.
+                          </p>
+                          <div style={{ background: 'var(--bg-dark)', border: '1px dashed #FF5555', padding: '12px', borderRadius: '8px', color: '#FF5555', fontWeight: 700, fontSize: '0.88rem' }}>
+                            Motivo: {currentUser.blockReason || 'Incumplimiento reiterado de términos de reserva'}
+                          </div>
+                        </div>
+                      ) : isUserTempBlocked ? (
                         <div style={{ background: 'rgba(255, 85, 85, 0.08)', border: '1px solid #FF5555', borderRadius: '12px', padding: '24px 20px', textAlign: 'center', marginBottom: '16px' }}>
                           <ShieldAlert size={32} color="#FF5555" style={{ marginBottom: '12px' }} />
-                          <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#FF5555', marginBottom: '8px' }}>Bloqueo Temporal de Reservas</h4>
-                          <p style={{ color: 'var(--text-main)', fontSize: '0.92rem', marginBottom: '16px' }}>Has acumulado 3 cancelaciones. Tu capacidad para reservar está suspendida hasta el:</p>
+                          <h4 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#FF5555', marginBottom: '8px' }}>Bloqueo Temporal (1 Semana)</h4>
+                          <p style={{ color: 'var(--text-main)', fontSize: '0.92rem', marginBottom: '16px' }}>Has acumulado 3 cancelaciones. Podrás agendar nuevamente el:</p>
                           <div style={{ background: 'var(--bg-dark)', border: '1px dashed #FF5555', padding: '12px', borderRadius: '8px', color: 'var(--gold-primary)', fontWeight: 700 }}>
                             {getFormattedBlockDate(currentUser.blockedUntil)}
                           </div>
