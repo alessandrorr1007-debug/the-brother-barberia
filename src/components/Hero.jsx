@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, ChevronDown, ShieldCheck } from 'lucide-react';
+import { Calendar, ShieldCheck, Scissors, Award, Clock } from 'lucide-react';
 
 export default function Hero({ onOpenBooking }) {
   return (
@@ -10,102 +10,127 @@ export default function Hero({ onOpenBooking }) {
         minHeight: '92vh',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingTop: '110px',
-        paddingBottom: '70px',
-        backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 12, 0.78), rgba(10, 10, 12, 0.95)), url('/assets/hero_barbershop.jpg')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        overflow: 'hidden'
+        background: 'var(--bg-dark)',
+        overflow: 'hidden',
+        paddingTop: '80px'
       }}
     >
-      {/* Decorative ambient radial glow */}
-      <div style={{
-        position: 'absolute',
-        width: '550px',
-        height: '550px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(197, 160, 89, 0.12) 0%, rgba(0,0,0,0) 70%)',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        pointerEvents: 'none'
-      }} />
+      {/* Editorial Background Image with Gradient Mask */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'url(/assets/hero_barbershop.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center 30%',
+          opacity: 0.38,
+          transform: 'scale(1.02)'
+        }}
+      />
 
-      <div className="container" style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
-        
-        {/* Tagline Badge */}
-        <div className="section-tag animate-fade-in" style={{ display: 'inline-flex', margin: '0 auto 20px auto' }}>
-          <ShieldCheck size={16} />
-          <span>Barbería Boutique & Estilo Masculino</span>
+      {/* Dark Vignette and Overlay Gradients */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(circle at 60% 40%, rgba(10,10,12,0.4) 0%, rgba(10,10,12,0.95) 85%)'
+        }}
+      />
+
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '160px',
+          background: 'linear-gradient(to top, var(--bg-dark), transparent)'
+        }}
+      />
+
+      {/* Hero Content */}
+      <div className="container" style={{ position: 'relative', zIndex: 10, padding: '40px 24px' }}>
+        <div style={{ maxWidth: '780px' }} className="animate-fade-in-up">
+          
+          {/* Badge */}
+          <div className="section-tag" style={{ marginBottom: '20px' }}>
+            <Scissors size={14} />
+            <span>Barbería Boutique • Miraflores</span>
+          </div>
+
+          {/* Main Title */}
+          <h1
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(2.8rem, 6vw, 4.8rem)',
+              fontWeight: 900,
+              lineHeight: 1.08,
+              letterSpacing: '-0.02em',
+              color: 'var(--text-main)',
+              marginBottom: '22px'
+            }}
+          >
+            ESTILO, TRADICIÓN Y <br />
+            <span className="gradient-text-gold">ACTITUD MASCULINA</span>
+          </h1>
+
+          {/* Subtitle */}
+          <p
+            style={{
+              fontSize: 'clamp(1.05rem, 2vw, 1.25rem)',
+              color: 'var(--text-muted)',
+              maxWidth: '620px',
+              marginBottom: '36px',
+              lineHeight: 1.65,
+              fontWeight: 400
+            }}
+          >
+            Un ambiente clásico-contemporáneo donde el oficio, el detalle y la confianza se encuentran. Cortes de precisión, fades impecables y afeitado a navaja por Maicol y su equipo.
+          </p>
+
+          {/* CTA Buttons */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', marginBottom: '48px' }}>
+            <button className="btn btn-primary" onClick={onOpenBooking} style={{ padding: '16px 36px', fontSize: '1.05rem' }}>
+              <Calendar size={20} />
+              <span>Reserva tu Cita</span>
+            </button>
+
+            <a href="#services" className="btn btn-secondary" style={{ padding: '16px 32px', fontSize: '1rem' }}>
+              <span>Ver Servicios & Precios</span>
+            </a>
+          </div>
+
+          {/* Feature Badges Grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '16px',
+            paddingTop: '24px',
+            borderTop: '1px solid var(--border-subtle)',
+            maxWidth: '660px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(197, 160, 89, 0.12)', border: '1px solid var(--border-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)' }}>
+                <Award size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-main)' }}>Fundador Maicol</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Atención Personalizada</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(197, 160, 89, 0.12)', border: '1px solid var(--border-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)' }}>
+                <ShieldCheck size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-main)' }}>Precios Reales</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Cortes desde S/ 25</div>
+              </div>
+            </div>
+          </div>
+
         </div>
-
-        {/* Main Title */}
-        <h1
-          className="section-title animate-fade-in"
-          style={{
-            fontSize: 'clamp(2.5rem, 6vw, 4.6rem)',
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            maxWidth: '920px',
-            margin: '0 auto 20px auto',
-            lineHeight: 1.08
-          }}
-        >
-          ESTILO, TRADICIÓN Y <span className="gradient-text-gold">ACTITUD</span>
-        </h1>
-
-        {/* Subtitle */}
-        <p
-          className="section-subtitle animate-fade-in"
-          style={{
-            fontSize: 'clamp(1.05rem, 1.8vw, 1.25rem)',
-            color: 'var(--text-muted)',
-            marginBottom: '40px',
-            lineHeight: 1.6
-          }}
-        >
-          Tu estilo en manos expertas. Oficio artesanal, corte de precisión y trato personalizado en un ambiente exclusivo.
-        </p>
-
-        {/* Action Buttons */}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '16px'
-          }}
-        >
-          <button className="btn btn-primary pulse-glow" onClick={() => onOpenBooking()}>
-            <Calendar size={20} />
-            <span>Reserva tu Cita</span>
-          </button>
-          <a href="#services" className="btn btn-secondary">
-            <span>Ver Servicios y Precios</span>
-          </a>
-        </div>
-
-        {/* Scroll Indicator */}
-        <a
-          href="#about"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginTop: '50px',
-            color: 'var(--text-muted)',
-            textDecoration: 'none',
-            transition: 'var(--transition-smooth)'
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--gold-primary)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-        >
-          <ChevronDown size={28} className="animate-bounce" />
-        </a>
-
       </div>
     </section>
   );
